@@ -1,6 +1,7 @@
 import streamlit as st
 import mysql.connector
 import pandas as pd
+from datetime import datetime
 
 # ---------- DB Connection ----------
 def get_connection():
@@ -11,7 +12,29 @@ def get_connection():
         database="u263681140_students"
     )
 
-# ---------- Fetch Medical History ----------
+# ---------- DB Queries ----------
+def insert_patient(data):
+    conn = get_connection()
+    cursor = conn.cursor()
+    sql = """
+    INSERT INTO E_casepatient 
+    (Name, RFIDNO, Age, Gender, BloodGroup, DateofBirth, ContactNo, EmailID, Address, DoctorAssigned)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """
+    cursor.execute(sql, data)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+def get_all_patients():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM E_casepatient ORDER BY ID DESC")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
 def get_all_medical_history():
     conn = get_connection()
     cursor = conn.cursor()
@@ -29,32 +52,56 @@ def get_all_medical_history():
         cursor.close()
         conn.close()
 
-# ---------- Page Config ----------
-st.set_page_config(page_title="View Medical History", layout="wide")
+def get_current_appointments(): 
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT * FROM E_Case
+            ORDER BY Date_Time DESC
+        """)
+        rows = cursor.fetchall()
+        
+        for row in rows:
+            rfid_no = row.get('RFID_No', '')
+            row['Status'] = f'<a href="./view_history?rfid_filter={rfid_no}" target="_blank">View History</a>'
+        return rows
+    except Exception as e:
+        st.error(f"❌ Failed to fetch appointments: {e}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
 
-st.title("📖 Patient Medical History")
+# ---------- Streamlit App ----------
+st.set_page_config(page_title="Patient Registration System", layout="wide")
+st.title("🧾 Patient Registration System")
 
-# ✅ Read RFID from URL query parameters
-rfid_filter = st.query_params.get("rfid_filter", [None])[0]
+menu = st.sidebar.radio("Menu", ["Register Patient", "View All Patients", "View Medical History", "Current Appointments"])
 
-if not rfid_filter:
-    st.warning("⚠️ No RFID provided in URL.")
-    st.stop()
+# ---------- Register Patient ----------
+if menu == "Register Patient":
+    with st.form("patient_form"):
+        st.subheader("Register New Patient")
+        name = st.text_input("Full Name")
+        rfid = st.text_input("RFID No")
+        age = st.text_input("Age")
+        gender = st.selectbox("Gender", ["Male", "Female", "Other"])
+        blood_group = st.text_input("Blood Group")
+        dob = st.date_input("Date of Birth")
+        contact = st.text_input("Contact Number")
+        email = st.text_input("Email ID")
+        address = st.text_area("Address")
+        doctor = st.text_input("Doctor Assigned")
 
-# ✅ Filtered Medical History
-st.subheader(f"Medical History for RFID: `{rfid_filter}`")
-
-try:
-    data = get_all_medical_history()
-    filtered_data = [r for r in data if r.get('RFID_No') == rfid_filter or r.get('RFIDNO') == rfid_filter]
-
-    if filtered_data:
-        df = pd.DataFrame(filtered_data)
-        st.dataframe(df, use_container_width=True)
-    else:
-        st.info("No medical history records found for this RFID.")
-except Exception as e:
-    st.error(f"❌ Error loading history: {e}")
-
-# 🔙 Back link
-st.markdown("[🔙 Back to Home](./)", unsafe_allow_html=True)
+        submitted = st.form_submit_button("Register Patient")
+        if submitted:
+            try:
+                age = int(age)
+                dob_str = dob.strftime('%Y-%m-%d')
+                insert_patient((name, rfid, age, gender, blood_group, dob_str, contact, email, address, doctor))
+                st.success("✅ Patient registered successfully!")
+            except ValueError:
+                st.error("❌ Age must be a number.")
+            except Exception as e:
+                st.error(f"❌ Error: {e
