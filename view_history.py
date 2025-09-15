@@ -2,7 +2,7 @@ import streamlit as st
 import mysql.connector
 import pandas as pd
 
-# ---------- Database Connection ----------
+# ---------- Database Connection ---------- 
 def get_connection():
     return mysql.connector.connect(
         host="82.180.143.66",
